@@ -19,8 +19,6 @@
 #import "MJExtension.h"
 #import "NSObject+MJKeyValue.h"
 #import "ApiList.h"
-#import "IQKeyboardManager.h"
-#import "IQKeyboardReturnKeyHandler.h"
 #import "NetAPIClicnet.h"
 #import "NetAPIManager.h"
 

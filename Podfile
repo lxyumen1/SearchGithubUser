@@ -4,7 +4,7 @@ target ‘SearchGitHubUser’ do
 pod 'MBProgressHUD'
 pod 'MJExtension'
 pod 'SDWebImage'
-pod 'IQKeyboardManager'
+#pod 'IQKeyboardManager'
 pod 'AFNetworking', '~> 3.0'
 pod 'Masonry'
 end

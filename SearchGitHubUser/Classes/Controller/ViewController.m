@@ -10,11 +10,13 @@
 #import "UserCell.h"
 #import "UserModel.h"
 
-@interface ViewController ()<UITableViewDelegate,UITableViewDataSource>
+@interface ViewController ()<UITableViewDelegate,UITableViewDataSource,UITextFieldDelegate>
 @property (weak, nonatomic) IBOutlet UITableView *userTableView;
 @property (weak, nonatomic) IBOutlet UITextField *searchText;
 @property (nonatomic,strong) NSMutableArray *dataSource;
+@property (nonatomic,strong) NSMutableArray *arrayOfTasks;
 @property (nonatomic,strong) NSMutableDictionary *dataSourceLan;
+@property (nonatomic,strong) AFHTTPSessionManager *manager;
 
 @end
 
@@ -27,6 +29,11 @@
     self.userTableView.tableFooterView = [[UIView alloc]initWithFrame:CGRectZero];
     self.dataSourceLan = [NSMutableDictionary dictionary];
     self.dataSource = [NSMutableArray array];
+    self.arrayOfTasks = [NSMutableArray array];
+    self.searchText.delegate = self;
+    self.manager = [[AFHTTPSessionManager alloc]init];
+    self.manager.responseSerializer = [AFJSONResponseSerializer serializer];
+    [self.searchText addTarget:self action:@selector(textFieldValueChange:) forControlEvents:UIControlEventEditingChanged];
     // Do any additional setup after loading the view, typically from a nib.
 }
 
@@ -39,13 +46,29 @@
     
     [self.view endEditing:YES];
     [self.dataSourceLan removeAllObjects];
-    [MBProgressHUD showMessage:@"Loading..." toView:self.view];
-    [[NetAPIManager sharedManager] request_queryUserWithTarget:self userName:self.searchText.text andBlock:^(id responseData, NSError *error) {
-        self.dataSource = [UserModel mj_objectArrayWithKeyValuesArray:responseData[@"items"]];
+    //    [MBProgressHUD showMessage:@"Loading..." toView:self.view];
+    
+    
+    NSURLSessionDataTask *task = [self.manager GET:[NSString stringWithFormat:@"%@/%@",DEF_NETPATH_BASEURL,api_query_user(self.searchText.text)]  parameters:nil progress:^(NSProgress * _Nonnull downloadProgress) {
+        
+    } success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+        self.dataSource = [UserModel mj_objectArrayWithKeyValuesArray:responseObject[@"items"]];
+        NSLog(@"");
         if (self.dataSource.count > 0) {
             [self getUserRespos];
         }
-    }];
+    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        NSLog(@"");
+    }] ;
+    
+    [self.arrayOfTasks addObject:task];
+    
+    //    [[NetAPIManager sharedManager] request_queryUserWithTarget:self userName:self.searchText.text andBlock:^(id responseData, NSError *error) {
+    //        self.dataSource = [UserModel mj_objectArrayWithKeyValuesArray:responseData[@"items"]];
+    //        if (self.dataSource.count > 0) {
+    //            [self getUserRespos];
+    //        }
+    //    }];
 }
 
 -(void)getUserRespos{
@@ -58,27 +81,58 @@
     for (UserModel *user in self.dataSource) {
         // 将任务添加到队列中
         dispatch_async(queue, ^{
-            [[NetAPIManager sharedManager]  request_queryUserReposWithTarget:self userName:user.login andBlock:^(id responseData, NSError *error) {
+            NSURLSessionDataTask *task = [self.manager GET:[NSString stringWithFormat:@"%@/%@",DEF_NETPATH_BASEURL,api_query_user_repos(user.login)]  parameters:nil progress:^(NSProgress * _Nonnull downloadProgress) {
+                
+            } success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
                 NSMutableArray *languageArr = [NSMutableArray array];
-                NSArray *respArr = responseData;
+                NSLog(@"%@",responseObject);
+
+                NSArray *respArr = responseObject;
                 if (respArr.count > 0) {
-                    for (NSDictionary *dic in responseData) {
+                    for (NSDictionary *dic in responseObject) {
                         if (![dic[@"language"] isEqual:[NSNull null]]) {
                             [languageArr addObject:dic[@"language"]];
                         }
                     }
-                    NSString *login = [responseData firstObject][@"owner"][@"login"];
+                    NSString *login = [responseObject firstObject][@"owner"][@"login"];
                     NSString *languageStr =  [self getLanguageMax:languageArr];
                     [self.dataSourceLan setValue:languageStr forKey:login];
                 }
-    
+                
                 NSLog(@"~~~~~%@",languageArr);
                 flag ++;
                 if (flag == self.dataSource.count) {
-                    [MBProgressHUD hideHUDForView:self.view animated:YES];
                     [self.userTableView reloadData];
                 }
-            }];
+                
+            } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+                NSLog(@"");
+            }] ;
+            
+            [self.arrayOfTasks addObject:task];
+            
+            
+            //            [[NetAPIManager sharedManager]  request_queryUserReposWithTarget:self userName:user.login andBlock:^(id responseData, NSError *error) {
+            //                NSMutableArray *languageArr = [NSMutableArray array];
+            //                NSArray *respArr = responseData;
+            //                if (respArr.count > 0) {
+            //                    for (NSDictionary *dic in responseData) {
+            //                        if (![dic[@"language"] isEqual:[NSNull null]]) {
+            //                            [languageArr addObject:dic[@"language"]];
+            //                        }
+            //                    }
+            //                    NSString *login = [responseData firstObject][@"owner"][@"login"];
+            //                    NSString *languageStr =  [self getLanguageMax:languageArr];
+            //                    [self.dataSourceLan setValue:languageStr forKey:login];
+            //                }
+            //
+            //                NSLog(@"~~~~~%@",languageArr);
+            //                flag ++;
+            //                if (flag == self.dataSource.count) {
+            //                    [MBProgressHUD hideHUDForView:self.view animated:YES];
+            //                    [self.userTableView reloadData];
+            //                }
+            //            }];
         });
     }
 }
@@ -127,6 +181,28 @@
         }
     }
     return @"暂无";
+}
+
+-(void)textFieldValueChange:(UITextField*)textField{
+    [self.dataSourceLan removeAllObjects];
+    //    [MBProgressHUD showMessage:@"Loading..." toView:self.view];
+    [self.arrayOfTasks enumerateObjectsUsingBlock:^(NSURLSessionDataTask *task, NSUInteger idx, BOOL * _Nonnull stop) {
+        [task cancel];
+    }];
+    
+    NSURLSessionDataTask *task = [self.manager GET:[NSString stringWithFormat:@"%@/%@",DEF_NETPATH_BASEURL,api_query_user(textField.text)]  parameters:nil progress:^(NSProgress * _Nonnull downloadProgress) {
+        
+    } success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+        self.dataSource = [UserModel mj_objectArrayWithKeyValuesArray:responseObject[@"items"]];
+        NSLog(@"%@",responseObject);
+        if (self.dataSource.count > 0) {
+            [self getUserRespos];
+        }
+    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        NSLog(@"");
+    }] ;
+    
+    [self.arrayOfTasks addObject:task];
 }
 
 -(NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
